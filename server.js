@@ -31,6 +31,7 @@
  */
 
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -44,12 +45,15 @@ const jobs = {};
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+var recordLimiter = rateLimit({ windowMs: 60 * 1000, max: 5 });
+var downloadLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
+
 /**
  * POST /record
  * Body: JSON capture config (url | htmlContent, fps, duration, viewport, …)
  * Returns: { jobId }
  */
-app.post('/record', function (req, res) {
+app.post('/record', recordLimiter, function (req, res) {
   var config = req.body || {};
   var jobId = crypto.randomBytes(8).toString('hex');
   var subscribers = [];
@@ -181,7 +185,7 @@ app.post('/stop/:jobId', function (req, res) {
  * GET /download/:filename
  * Streams the finished video back to the browser.
  */
-app.get('/download/:filename', function (req, res) {
+app.get('/download/:filename', downloadLimiter, function (req, res) {
   var filename = req.params.filename;
   // Resolve against cwd; reject path traversal attempts
   var resolved = path.resolve(process.cwd(), filename);
