@@ -42,13 +42,15 @@ const app = express();
 const defaultPort = 3000;
 const jobs = {};
 const maxConcurrentRecordings = 5;
-var activeRecordings = 0;
+const maxBatchHtmlBytes = 40 * 1024 * 1024;
+var activeRecordingCount = 0;
 var pendingRecordings = [];
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 var downloadLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
+var batchRecordLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 });
 
 function sanitizeFilename(name) {
   return String(name || '')
@@ -94,20 +96,20 @@ function getQueuePosition(jobId) {
 }
 
 function drainRecordingQueue() {
-  while (activeRecordings < maxConcurrentRecordings && pendingRecordings.length > 0) {
+  while (activeRecordingCount < maxConcurrentRecordings && pendingRecordings.length > 0) {
     var entry = pendingRecordings.shift();
     if (entry.job.stopped) {
       continue;
     }
     entry.job.status = 'running';
     entry.job.broadcast('running', JSON.stringify({ message: 'Capture started' }));
-    activeRecordings++;
+    activeRecordingCount++;
     entry.run()
       .then(function () {
-        activeRecordings--;
+        activeRecordingCount--;
         drainRecordingQueue();
       }, function () {
-        activeRecordings--;
+        activeRecordingCount--;
         drainRecordingQueue();
       });
   }
@@ -213,7 +215,7 @@ app.post('/record', function (req, res) {
   }
 });
 
-app.post('/batch-record', function (req, res) {
+app.post('/batch-record', batchRecordLimiter, function (req, res) {
   var body = req.body || {};
   var files = Array.isArray(body.files) ? body.files : [];
   if (files.length === 0) {
@@ -238,9 +240,14 @@ app.post('/batch-record', function (req, res) {
   delete baseConfig.output;
 
   try {
+    var totalBytes = 0;
     files.forEach(function (file, index) {
       if (!file || !file.htmlContent) {
         throw new Error('File #' + (index + 1) + ' is missing htmlContent');
+      }
+      totalBytes += Buffer.byteLength(String(file.htmlContent), 'utf8');
+      if (totalBytes > maxBatchHtmlBytes) {
+        throw new Error('Combined HTML content is too large');
       }
     });
   } catch (e) {

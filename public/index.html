@@ -543,7 +543,13 @@
           row.className = 'batch-job';
           document.getElementById('batch-jobs').appendChild(row);
         }
-        row.innerHTML = '<span>' + job.name + '</span><span>' + job.status + ' ' + job.progress + '%</span>';
+        row.innerHTML = '';
+        var nameEl = document.createElement('span');
+        nameEl.textContent = job.name;
+        var statusEl = document.createElement('span');
+        statusEl.textContent = job.status + ' ' + job.progress + '%';
+        row.appendChild(nameEl);
+        row.appendChild(statusEl);
       }
 
       function updateControlsForRunning(isRunning) {
