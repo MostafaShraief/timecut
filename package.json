@@ -14,7 +14,8 @@
   },
   "main": "index.js",
   "scripts": {
-    "lint": "eslint *.js"
+    "lint": "eslint *.js",
+    "start": "node server.js"
   },
   "bin": {
     "timecut": "./cli.js"
@@ -22,6 +23,8 @@
   "license": "BSD-3-Clause",
   "dependencies": {
     "commander": "^2.11.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
     "timesnap": "0.3.3"
   },
   "devDependencies": {
