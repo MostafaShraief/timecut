@@ -41,6 +41,19 @@ After configuring, run:
 npm install -g timecut
 ```
 
+**Windows quick start**
+
+1. Install [Node.js LTS](https://nodejs.org/) (includes npm).
+2. Install ffmpeg and add it to your `PATH` (for example with `winget install Gyan.FFmpeg`).
+3. Install timecut:
+   ```
+   npm install -g timecut
+   ```
+4. Verify:
+   ```
+   timecut --version
+   ```
+
 To use:
 ```
 timecut "url" [options]
@@ -349,8 +362,9 @@ Once running, open your browser to `http://localhost:3000`.
 The web UI at `http://localhost:3000` lets you configure and launch a recording without writing any code:
 
 * **Source** — provide either a URL / local file path *or* paste raw HTML directly into the editor.
+* **Multi-file HTML input** — select multiple `.html` files from file explorer or drag-and-drop them into the page.
 * **Capture Settings** — set frames per second, duration, viewport size, start offset, pixel format, output filename, and screenshot format.
-* **Start Recording** — submits the job to the server and displays a live progress bar and log.
+* **Start Recording** — submits one or many jobs and displays live progress and queue/running/done/error state per file.
 * **Stop** — sends a stop signal to the running job (best-effort).
 * **Result** — once the job completes, a video preview and a **Download Video** button appear automatically.
 
@@ -377,9 +391,31 @@ Starts a new capture job. Returns a `jobId` that can be used to track progress.
 { "jobId": "a1b2c3d4e5f6a7b8" }
 ```
 
-**Rate limit**: 5 requests per minute.
-
 ---
+
+#### `POST /batch-record`
+
+Starts multiple HTML capture jobs in one request.
+
+**Request body** (JSON):
+
+| Field | Type | Description |
+|---|---|---|
+| `output` | string | Base output name used to create a unique batch output folder. |
+| `config` | object | Shared capture config for all files (same fields as `POST /record`). |
+| `files` | array | Array of `{ "name": "...html", "htmlContent": "<!doctype html>..." }`. |
+
+**Response** (JSON):
+
+```json
+{
+  "batchId": "0f1e2d3c4b5a",
+  "outputDirectory": "/absolute/path/videos-batch-0f1e2d3c4b5a",
+  "jobs": [
+    { "jobId": "a1b2c3d4e5f6a7b8", "name": "example.html", "output": "/absolute/path/videos-batch-0f1e2d3c4b5a/example.mp4" }
+  ]
+}
+```
 
 #### `GET /progress/:jobId`
 
@@ -387,6 +423,8 @@ Opens a [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Se
 
 | Event | Data | Description |
 |---|---|---|
+| `queued` | `{"position": N}` | Job is queued waiting for an execution slot. |
+| `running` | `{"message":"Capture started"}` | Job moved from queue to running. |
 | `log` | string | Human-readable status message. |
 | `progress` | `{"captured": N, "total": N}` | Frame capture progress. |
 | `done` | `{"output": "/path/to/video.mp4"}` | Emitted when the job finishes successfully. |

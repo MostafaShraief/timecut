@@ -285,6 +285,46 @@
       font-size: 0.75rem;
       margin-top: 0.25rem;
     }
+
+    .drop-zone {
+      margin-top: 0.75rem;
+      border: 1px dashed #475569;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.8125rem;
+      background: #0f172a;
+    }
+
+    .drop-zone.dragover {
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+
+    #selected-files {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+    }
+
+    #batch-jobs {
+      margin-top: 1rem;
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .batch-job {
+      border: 1px solid #334155;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: #0f172a;
+      font-size: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -302,6 +342,7 @@
       <div class="source-tabs">
         <button class="tab-btn active" data-tab="url">URL / File</button>
         <button class="tab-btn" data-tab="html">Inline HTML</button>
+        <button class="tab-btn" data-tab="files">HTML Files</button>
       </div>
 
       <div id="tab-url" class="tab-panel active">
@@ -317,6 +358,15 @@
           <label for="html-content">HTML content</label>
           <textarea id="html-content" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;…&lt;/html&gt;"></textarea>
           <span class="hint">The HTML will be saved to a temporary file and captured.</span>
+        </div>
+      </div>
+
+      <div id="tab-files" class="tab-panel">
+        <div class="form-group">
+          <label for="html-files">Select HTML files</label>
+          <input type="file" id="html-files" accept=".html,.htm,text/html" multiple />
+          <div id="drop-zone" class="drop-zone">Drag and drop HTML files here</div>
+          <div id="selected-files"></div>
         </div>
       </div>
     </div>
@@ -390,6 +440,7 @@
         <div class="progress-bar-fill" id="progress-bar"></div>
       </div>
       <div class="log-box" id="log-box"></div>
+      <div id="batch-jobs"></div>
     </div>
 
     <!-- Result -->
@@ -409,7 +460,10 @@
     (function () {
       var currentJobId = null;
       var evtSource = null;
+      var jobSources = [];
+      var batchJobs = {};
       var activeTab = 'url';
+      var selectedHtmlFiles = [];
 
       // Tab switching
       document.querySelectorAll('.tab-btn').forEach(function (btn) {
@@ -449,6 +503,84 @@
         document.getElementById('progress-bar').style.width = Math.min(100, pct) + '%';
       }
 
+      function renderSelectedFiles() {
+        var box = document.getElementById('selected-files');
+        if (!selectedHtmlFiles.length) {
+          box.textContent = '';
+          return;
+        }
+        box.textContent = selectedHtmlFiles.map(function (f) { return f.name; }).join(', ');
+      }
+
+      function readFileAsText(file) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(String(reader.result || '')); };
+          reader.onerror = function () { reject(new Error('Could not read ' + file.name)); };
+          reader.readAsText(file);
+        });
+      }
+
+      function closeAllSources() {
+        if (evtSource) { evtSource.close(); }
+        evtSource = null;
+        jobSources.forEach(function (source) { source.close(); });
+        jobSources = [];
+      }
+
+      function resetBatchList() {
+        batchJobs = {};
+        document.getElementById('batch-jobs').innerHTML = '';
+      }
+
+      function renderBatchJob(jobId) {
+        var job = batchJobs[jobId];
+        if (!job) { return; }
+        var row = document.getElementById('batch-job-' + jobId);
+        if (!row) {
+          row = document.createElement('div');
+          row.id = 'batch-job-' + jobId;
+          row.className = 'batch-job';
+          document.getElementById('batch-jobs').appendChild(row);
+        }
+        row.innerHTML = '<span>' + job.name + '</span><span>' + job.status + ' ' + job.progress + '%</span>';
+      }
+
+      function updateControlsForRunning(isRunning) {
+        document.getElementById('btn-record').disabled = isRunning;
+        document.getElementById('btn-stop').disabled = !isRunning;
+      }
+
+      function handleSelectedFiles(fileList) {
+        selectedHtmlFiles = Array.prototype.filter.call(fileList || [], function (f) {
+          return /\.html?$/i.test(f.name);
+        });
+        renderSelectedFiles();
+      }
+
+      document.getElementById('html-files').addEventListener('change', function (e) {
+        handleSelectedFiles(e.target.files);
+      });
+
+      var dropZone = document.getElementById('drop-zone');
+      ['dragenter', 'dragover'].forEach(function (evtName) {
+        dropZone.addEventListener(evtName, function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add('dragover');
+        });
+      });
+      ['dragleave', 'drop'].forEach(function (evtName) {
+        dropZone.addEventListener(evtName, function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('dragover');
+        });
+      });
+      dropZone.addEventListener('drop', function (e) {
+        handleSelectedFiles(e.dataTransfer.files);
+      });
+
       document.getElementById('btn-record').addEventListener('click', function () {
         var config = {
           fps: parseFloat(document.getElementById('fps').value) || 60,
@@ -470,14 +602,97 @@
         }
 
         // Reset UI
+        closeAllSources();
+        currentJobId = null;
         document.getElementById('log-box').innerHTML = '';
         document.getElementById('result-card').style.display = 'none';
         document.getElementById('result-video').src = '';
         setProgress(0);
+        resetBatchList();
         document.getElementById('status-card').style.display = '';
         setStatus('running');
-        document.getElementById('btn-record').disabled = true;
-        document.getElementById('btn-stop').disabled = false;
+        updateControlsForRunning(true);
+
+        if (activeTab === 'files') {
+          if (!selectedHtmlFiles.length) {
+            addLog('Select at least one HTML file.', 'error');
+            setStatus('error');
+            updateControlsForRunning(false);
+            return;
+          }
+
+          Promise.all(selectedHtmlFiles.map(function (file) {
+            return readFileAsText(file).then(function (content) {
+              return { name: file.name, htmlContent: content };
+            });
+          }))
+            .then(function (filesPayload) {
+              return fetch('/batch-record', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  output: config.output,
+                  config: config,
+                  files: filesPayload
+                })
+              });
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+              if (data.error) {
+                throw new Error(data.error);
+              }
+              addLog('Batch output folder: ' + data.outputDirectory, 'info');
+              var remaining = data.jobs.length;
+              data.jobs.forEach(function (jobInfo) {
+                batchJobs[jobInfo.jobId] = { name: jobInfo.name, status: 'queued', progress: 0 };
+                renderBatchJob(jobInfo.jobId);
+                subscribeProgress(jobInfo.jobId, {
+                  onQueued: function (info) {
+                    batchJobs[jobInfo.jobId].status = 'queued (#' + info.position + ')';
+                    renderBatchJob(jobInfo.jobId);
+                  },
+                  onRunning: function () {
+                    batchJobs[jobInfo.jobId].status = 'running';
+                    renderBatchJob(jobInfo.jobId);
+                  },
+                  onProgress: function (info) {
+                    var pct = info.total > 0 ? Math.round((info.captured / info.total) * 100) : 0;
+                    batchJobs[jobInfo.jobId].status = 'running';
+                    batchJobs[jobInfo.jobId].progress = pct;
+                    renderBatchJob(jobInfo.jobId);
+                  },
+                  onDone: function () {
+                    batchJobs[jobInfo.jobId].status = 'done';
+                    batchJobs[jobInfo.jobId].progress = 100;
+                    renderBatchJob(jobInfo.jobId);
+                    remaining--;
+                    if (remaining === 0) {
+                      setStatus('done');
+                      setProgress(100);
+                      updateControlsForRunning(false);
+                    }
+                  },
+                  onError: function (msg) {
+                    batchJobs[jobInfo.jobId].status = 'error';
+                    renderBatchJob(jobInfo.jobId);
+                    addLog(jobInfo.name + ': ' + msg, 'error');
+                    remaining--;
+                    if (remaining === 0) {
+                      setStatus('error');
+                      updateControlsForRunning(false);
+                    }
+                  }
+                });
+              });
+            })
+            .catch(function (err) {
+              addLog('Batch request failed: ' + err.message, 'error');
+              setStatus('error');
+              updateControlsForRunning(false);
+            });
+          return;
+        }
 
         fetch('/record', {
           method: 'POST',
@@ -489,8 +704,7 @@
             if (data.error) {
               addLog('Error: ' + data.error, 'error');
               setStatus('error');
-              document.getElementById('btn-record').disabled = false;
-              document.getElementById('btn-stop').disabled = true;
+              updateControlsForRunning(false);
               return;
             }
             currentJobId = data.jobId;
@@ -499,42 +713,66 @@
           .catch(function (err) {
             addLog('Request failed: ' + err.message, 'error');
             setStatus('error');
-            document.getElementById('btn-record').disabled = false;
-            document.getElementById('btn-stop').disabled = true;
+            updateControlsForRunning(false);
           });
       });
 
       document.getElementById('btn-stop').addEventListener('click', function () {
-        if (!currentJobId) { return; }
-        fetch('/stop/' + currentJobId, { method: 'POST' }).catch(function () {});
+        if (currentJobId) {
+          fetch('/stop/' + currentJobId, { method: 'POST' }).catch(function () {});
+        }
+        Object.keys(batchJobs).forEach(function (jobId) {
+          fetch('/stop/' + jobId, { method: 'POST' }).catch(function () {});
+        });
         document.getElementById('btn-stop').disabled = true;
       });
 
-      function subscribeProgress(jobId) {
-        if (evtSource) { evtSource.close(); }
-        evtSource = new EventSource('/progress/' + jobId);
+      function subscribeProgress(jobId, handlers) {
+        var localHandlers = handlers || {};
+        var source = new EventSource('/progress/' + jobId);
+        if (!handlers) {
+          if (evtSource) { evtSource.close(); }
+          evtSource = source;
+        } else {
+          jobSources.push(source);
+        }
 
-        evtSource.addEventListener('log', function (e) {
+        source.addEventListener('queued', function (e) {
+          try {
+            var info = JSON.parse(e.data);
+            if (localHandlers.onQueued) { localHandlers.onQueued(info); }
+            addLog('Job ' + jobId + ' queued at position #' + info.position, 'info');
+          } catch (err) {}
+        });
+
+        source.addEventListener('running', function () {
+          if (localHandlers.onRunning) { localHandlers.onRunning(); }
+        });
+
+        source.addEventListener('log', function (e) {
           addLog(e.data);
         });
 
-        evtSource.addEventListener('progress', function (e) {
+        source.addEventListener('progress', function (e) {
           var info = JSON.parse(e.data);
+          if (localHandlers.onProgress) { localHandlers.onProgress(info); }
           if (info.total > 0) {
             setProgress((info.captured / info.total) * 95);
             addLog('Frame ' + info.captured + ' / ' + info.total, 'info');
           }
         });
 
-        evtSource.addEventListener('done', function (e) {
+        source.addEventListener('done', function (e) {
           var info = JSON.parse(e.data);
+          if (localHandlers.onDone) { localHandlers.onDone(info); }
           setProgress(100);
-          setStatus('done');
-          evtSource.close();
-          document.getElementById('btn-record').disabled = false;
-          document.getElementById('btn-stop').disabled = true;
+          source.close();
+          if (!handlers) {
+            setStatus('done');
+            updateControlsForRunning(false);
+          }
 
-          if (info.output) {
+          if (!handlers && info.output) {
             var videoUrl = '/download/' + encodeURIComponent(info.output);
             var videoEl = document.getElementById('result-video');
             videoEl.src = videoUrl;
@@ -545,14 +783,16 @@
           }
         });
 
-        evtSource.addEventListener('error', function (e) {
+        source.addEventListener('error', function (e) {
           var msg = e.data || 'Unknown error';
+          if (localHandlers.onError) { localHandlers.onError(msg); }
           addLog('Error: ' + msg, 'error');
-          setStatus('error');
-          setProgress(0);
-          evtSource.close();
-          document.getElementById('btn-record').disabled = false;
-          document.getElementById('btn-stop').disabled = true;
+          source.close();
+          if (!handlers) {
+            setStatus('error');
+            setProgress(0);
+            updateControlsForRunning(false);
+          }
         });
       }
     })();
