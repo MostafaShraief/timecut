@@ -21,6 +21,10 @@ To only record screenshots and save them as pictures, see **[timesnap](https://g
   * [Node Install](#node-install)
   * [Node Examples](#node-examples)
   * [Node API](#node-api)
+* [Web Server / UI](#from-server)
+  * [Server Install and Start](#server-install)
+  * [Web UI](#server-ui)
+  * [REST API](#server-api)
 * [timecut Modes](#modes)
 * [How it works](#how-it-works)
 
@@ -307,6 +311,123 @@ The Node API is structured similarly to the command line options, but there are 
         * <a name="js-config-output-stream-options-format" href="#js-config-output-stream-options-format">#</a> `format` &lt;[string][]&gt; Format of piped output. Defaults to `'mp4'` if undefined.
         * <a name="js-config-output-stream-options-movflags" href="#js-config-output-stream-options-movflags">#</a> `movflags` &lt;[string][]&gt; String representing MOV muxer flags to pass via `-movflags` argument. Defaults to `'frag_keyframe+empty_moov+faststart'` if undefined.
 * <a name="js-api-return" href="#js-api-return">#</a> returns: &lt;[Promise][]&gt; resolves after all the frames have been captured.
+
+## <a name="from-server" href="#from-server">#</a> Web Server / UI
+
+**timecut** ships with a built-in Express web server that exposes a browser-based UI and a small REST API. This lets you trigger recordings, monitor progress, and download finished videos entirely from a web browser — no command line required after the server is started.
+
+### <a name="server-install" href="#server-install">#</a> Server Install and Start
+
+Install dependencies (if you haven't already):
+
+```
+npm install
+```
+
+Start the server:
+
+```
+npm start
+```
+
+Or equivalently:
+
+```
+node server.js
+```
+
+By default the server listens on port **3000**. You can override this with the `PORT` environment variable:
+
+```
+PORT=8080 npm start
+```
+
+Once running, open your browser to `http://localhost:3000`.
+
+### <a name="server-ui" href="#server-ui">#</a> Web UI
+
+The web UI at `http://localhost:3000` lets you configure and launch a recording without writing any code:
+
+* **Source** — provide either a URL / local file path *or* paste raw HTML directly into the editor.
+* **Capture Settings** — set frames per second, duration, viewport size, start offset, pixel format, output filename, and screenshot format.
+* **Start Recording** — submits the job to the server and displays a live progress bar and log.
+* **Stop** — sends a stop signal to the running job (best-effort).
+* **Result** — once the job completes, a video preview and a **Download Video** button appear automatically.
+
+### <a name="server-api" href="#server-api">#</a> REST API
+
+#### `POST /record`
+
+Starts a new capture job. Returns a `jobId` that can be used to track progress.
+
+**Request body** (JSON): any fields accepted by the [Node API](#node-api), plus:
+
+| Field | Type | Description |
+|---|---|---|
+| `url` | string | URL or file path to capture. |
+| `htmlContent` | string | Raw HTML to capture (alternative to `url`). Written to a temporary file automatically and deleted once the job finishes or fails. |
+| `fps` | number | Frames per second (default: `60`). |
+| `duration` | number | Duration in seconds (default: `5`). |
+| `viewport` | object | `{ width, height }` — viewport size (default: `{ width: 800, height: 600 }`). |
+| `output` | string | Output filename (default: `video.mp4`). |
+
+**Response** (JSON):
+
+```json
+{ "jobId": "a1b2c3d4e5f6a7b8" }
+```
+
+**Rate limit**: 5 requests per minute.
+
+---
+
+#### `GET /progress/:jobId`
+
+Opens a [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) stream for the given job. Each event has a named `event` field and a `data` field:
+
+| Event | Data | Description |
+|---|---|---|
+| `log` | string | Human-readable status message. |
+| `progress` | `{"captured": N, "total": N}` | Frame capture progress. |
+| `done` | `{"output": "/path/to/video.mp4"}` | Emitted when the job finishes successfully. |
+| `error` | string | Error message if the job failed. |
+
+**Example** (JavaScript):
+
+```js
+const es = new EventSource('/progress/' + jobId);
+es.addEventListener('progress', e => {
+  const { captured, total } = JSON.parse(e.data);
+  console.log(`${captured} / ${total} frames`);
+});
+es.addEventListener('done', e => {
+  const { output } = JSON.parse(e.data);
+  console.log('Video saved to', output);
+  es.close();
+});
+```
+
+---
+
+#### `POST /stop/:jobId`
+
+Sends a stop signal to the running job. The capture will not add any more frames after this call, though the ffmpeg encoding step may still complete.
+
+**Response** (JSON):
+
+```json
+{ "ok": true }
+```
+
+---
+
+#### `GET /download/:filename`
+
+Streams a finished video file back to the client. *filename* must be a plain filename (no path separators); the file is resolved relative to the server's current working directory (the directory from which `npm start` / `node server.js` was run), which is also where output videos are written by default. Returns `400` for path-traversal attempts and `404` if the file does not exist.
+
+**Rate limit**: 30 requests per minute.
+
+---
 
 ## <a name="modes" href="#modes">#</a> **timecut** Modes
 ### <a name="capture-modes" href="#capture-modes">#</a> Capture Modes
