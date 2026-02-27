@@ -1,0 +1,6 @@
+@Timecut.Server_HostAddress = http://localhost:5249
+
+GET {{Timecut.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timecut Server</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text: #1e293b;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 { margin-bottom: 2rem; }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            background: var(--surface);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-group label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #64748b;
+        }
+
+        .control-group input {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .action-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background: var(--surface);
+            transition: all 0.2s;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: var(--primary);
+            background: #eff6ff;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn.danger { background: #ef4444; }
+        .btn.secondary { background: #64748b; }
+        .btn.success { background: #22c55e; }
+
+        .job-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .job-card {
+            background: var(--surface);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border-left: 4px solid #cbd5e1;
+        }
+
+        .job-card.queued { border-left-color: #f59e0b; }
+        .job-card.processing { border-left-color: #3b82f6; }
+        .job-card.completed { border-left-color: #22c55e; }
+        .job-card.failed { border-left-color: #ef4444; }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .job-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .job-status {
+            font-size: 0.875rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: #f1f5f9;
+        }
+
+        .progress-bar-container {
+            height: 8px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .job-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .pasted-html-badge {
+            background: #ddd;
+            font-size: 0.7em;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Timecut Batch Processor</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>Max Concurrent Tasks</label>
+                <input type="number" id="concurrency" value="3" min="1" max="10">
+            </div>
+            <div class="control-group">
+                <label>FPS</label>
+                <input type="number" id="fps" value="30">
+            </div>
+            <div class="control-group">
+                <label>Duration (sec)</label>
+                <input type="number" id="duration" value="60">
+            </div>
+            <div class="control-group">
+                <label>Width</label>
+                <input type="number" id="width" value="1920">
+            </div>
+            <div class="control-group">
+                <label>Height</label>
+                <input type="number" id="height" value="1080">
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <button id="startBtn" class="btn success" onclick="startProcessing()" disabled>Start Processing</button>
+            <button id="stopBtn" class="btn danger" onclick="stopAll()" disabled>Stop All</button>
+            <button id="clearBtn" class="btn secondary" onclick="clearQueue()">Clear Queue</button>
+        </div>
+
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <p><strong>Drag & Drop</strong> HTML files here</p>
+            <p style="font-size: 0.9em; color: #666;">Or <strong>Paste (Ctrl+V)</strong> HTML code directly</p>
+            <input type="file" id="fileInput" multiple accept=".html,.htm" style="display: none;">
+        </div>
+
+        <div id="jobList" class="job-list"></div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const jobList = document.getElementById('jobList');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const clearBtn = document.getElementById('clearBtn');
+
+        let queue = []; // Stores { id, name, content, status: 'queued'|'processing'|'completed'|'failed' }
+        let isProcessing = false;
+
+        // --- Drag & Drop ---
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', handleFiles, false);
+
+        // --- Paste Handler ---
+        document.addEventListener('paste', async (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            if (text && text.trim().startsWith('<')) {
+                // Heuristic check if it looks like HTML
+                addJobToQueue({
+                    name: `Pasted HTML ${new Date().toLocaleTimeString()}`,
+                    content: text,
+                    isPasted: true
+                });
+            } else {
+                alert("Pasted content does not look like HTML. Ensure it starts with '<'.");
+            }
+        });
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            processFiles(files);
+        }
+
+        function handleFiles(e) {
+            const files = e.target.files;
+            processFiles(files);
+        }
+
+        function processFiles(files) {
+            Array.from(files).forEach(file => {
+                if (file.type === "text/html" || file.name.endsWith(".html") || file.name.endsWith(".htm")) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        addJobToQueue({
+                            name: file.name,
+                            content: e.target.result,
+                            isPasted: false
+                        });
+                    };
+                    reader.readAsText(file);
+                }
+            });
+            // Clear input so same file can be selected again
+            fileInput.value = '';
+        }
+
+        function addJobToQueue(jobData) {
+            const job = {
+                id: crypto.randomUUID(),
+                ...jobData,
+                status: 'queued',
+                progress: 0
+            };
+            queue.push(job);
+            renderJob(job);
+            updateButtons();
+        }
+
+        function renderJob(job) {
+            const div = document.createElement('div');
+            div.className = 'job-card queued';
+            div.id = `job-${job.id}`;
+            div.innerHTML = `
+                <div class="job-header">
+                    <span class="job-title">
+                        ${job.isPasted ? '<span class="pasted-html-badge">PASTED</span>' : ''} 
+                        ${escapeHtml(job.name)}
+                    </span>
+                    <span class="job-status" id="status-${job.id}">Queued</span>
+                </div>
+                <div class="progress-bar-container" id="progress-container-${job.id}">
+                    <div class="progress-bar-fill" id="progress-${job.id}"></div>
+                </div>
+                <div class="job-actions">
+                    <button class="btn secondary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="removeJob('${job.id}')">Remove</button>
+                </div>
+            `;
+            jobList.appendChild(div);
+        }
+
+        function removeJob(id) {
+            const index = queue.findIndex(j => j.id === id);
+            if (index > -1) {
+                // If currently processing, we should probably tell the server to cancel (if implemented per-job)
+                // For now, simpler to just remove from UI queue if queued
+                if(queue[index].status === 'processing') {
+                    fetch(`/stop/${id}`, { method: 'POST' });
+                }
+                queue.splice(index, 1);
+                document.getElementById(`job-${id}`).remove();
+                updateButtons();
+            }
+        }
+
+        function clearQueue() {
+            if (isProcessing) {
+                if(!confirm("Processing is active. Are you sure you want to clear pending items?")) return;
+            }
+            // Only clear non-processing items or stop everything?
+            // User requirement: "cancel task".
+            queue = queue.filter(j => j.status === 'processing' || j.status === 'completed' || j.status === 'failed');
+            // Re-render only active/done
+            jobList.innerHTML = '';
+            queue.forEach(j => renderJob(j)); // Re-render logic would need to be smarter to preserve existing elements
+            
+            // Simpler approach: reload page or just clear the array and DOM
+            queue.forEach(j => {
+                if (j.status !== 'processing') {
+                    const el = document.getElementById(`job-${j.id}`);
+                    if (el) el.remove();
+                }
+            });
+            queue = queue.filter(j => j.status === 'processing');
+            updateButtons();
+        }
+
+        async function startProcessing() {
+            if (isProcessing) return;
+            
+            // Update settings
+            const concurrency = parseInt(document.getElementById('concurrency').value) || 3;
+            // Fix: Send JSON body instead of query param
+            await fetch('/concurrency', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ limit: concurrency })
+            });
+
+            const fps = parseInt(document.getElementById('fps').value);
+            const duration = parseInt(document.getElementById('duration').value);
+            const width = parseInt(document.getElementById('width').value);
+            const height = parseInt(document.getElementById('height').value);
+
+            isProcessing = true;
+            updateButtons();
+
+            // Find all queued items
+            const queuedJobs = queue.filter(j => j.status === 'queued');
+            
+            // We initiate the requests. The server handles concurrency (Semaphore).
+            // But if we have 100 files, we probably don't want to fire 100 requests at once 
+            // because browser connection limits might block the SSE streams.
+            // Let's fire them all and trust the server's JobQueue, or use a small client-side limit.
+            // Since we moved to a JobQueue on server, we can fire them all.
+            
+            for (const job of queuedJobs) {
+                runJob(job, { fps, duration, width, height });
+            }
+        }
+
+        async function runJob(job, settings) {
+             const card = document.getElementById(`job-${job.id}`);
+             const statusEl = document.getElementById(`status-${job.id}`);
+             const progressContainer = document.getElementById(`progress-container-${job.id}`);
+             const progressFill = document.getElementById(`progress-${job.id}`);
+             
+             job.status = 'processing';
+             card.className = 'job-card processing';
+             statusEl.textContent = 'Waiting for slot...';
+             progressContainer.style.display = 'block';
+
+             // Setup EventSource for progress
+             const evtSource = new EventSource(`/progress/${job.id}`);
+             evtSource.onmessage = (e) => {
+                 const percent = parseFloat(e.data);
+                 progressFill.style.width = `${percent}%`;
+                 statusEl.textContent = `Processing ${Math.round(percent)}%`;
+             };
+
+             evtSource.onerror = (e) => {
+                 // Connection closed usually means done or error, handled by fetch result below
+                 evtSource.close();
+             };
+
+             try {
+                 const response = await fetch('/record', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({
+                         id: job.id,
+                         htmlContent: job.content,
+                         fps: settings.fps,
+                         duration: settings.duration,
+                         width: settings.width,
+                         height: settings.height
+                     })
+                 });
+
+                 if (response.ok) {
+                     job.status = 'completed';
+                     statusEl.textContent = 'Completed';
+                     card.className = 'job-card completed';
+                     progressFill.style.width = '100%';
+                 } else {
+                     throw new Error('Server error');
+                 }
+             } catch (err) {
+                 if (job.status !== 'cancelled') {
+                    job.status = 'failed';
+                    statusEl.textContent = 'Failed';
+                    card.className = 'job-card failed';
+                 }
+             } finally {
+                 evtSource.close();
+                 checkAllDone();
+             }
+        }
+
+        async function stopAll() {
+            // Cancel all pending in queue
+            const pending = queue.filter(j => j.status === 'queued');
+            pending.forEach(j => {
+                j.status = 'cancelled';
+                const s = document.getElementById(`status-${j.id}`);
+                if(s) s.textContent = 'Cancelled';
+            });
+
+            // Stop running jobs on server
+            const running = queue.filter(j => j.status === 'processing');
+            for (const job of running) {
+                job.status = 'cancelled'; // Mark UI
+                fetch(`/stop/${job.id}`, { method: 'POST' });
+                const card = document.getElementById(`job-${job.id}`);
+                if(card) {
+                    card.className = 'job-card failed';
+                    document.getElementById(`status-${job.id}`).textContent = 'Stopped';
+                }
+            }
+            
+            isProcessing = false;
+            updateButtons();
+        }
+        
+        function checkAllDone() {
+            const active = queue.some(j => j.status === 'processing' || j.status === 'queued');
+            if (!active && isProcessing) {
+                isProcessing = false;
+                updateButtons();
+            }
+        }
+
+        function updateButtons() {
+            const hasQueued = queue.some(j => j.status === 'queued');
+            startBtn.disabled = isProcessing || !hasQueued;
+            stopBtn.disabled = !isProcessing;
+            
+            // Allow clearing if we have items
+            clearBtn.disabled = queue.length === 0;
+            
+            // Allow adding files during processing? Yes.
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

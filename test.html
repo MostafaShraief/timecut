@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-width=1.0">
+    <title>Slide 2: Introduction to FET</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-light: #f8fafc;
+            --header-start: #394A9D;
+            --header-end: #2278BE;
+            --accent-gold: #f39c12;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --card-bg: #ffffff;
+            --color-blue: #3b82f6;
+            --color-red: #e74c3c;
+            --color-green: #27ae60;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: var(--bg-light);
+            font-family: 'Tajawal', sans-serif;
+            color: var(--text-main);
+        }
+
+        /* Background Pattern */
+        .bg-pattern {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: radial-gradient(rgba(189,195,199,0.3) 2px, transparent 2px);
+            background-size: 40px 40px;
+            z-index: 0;
+        }
+
+        .slide-container {
+            width: 1920px;
+            height: 1080px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            transform-origin: center center;
+            background: transparent;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        /* Header */
+        header {
+            width: 100%;
+            height: 140px;
+            background: linear-gradient(90deg, var(--header-start), var(--header-end));
+            border-bottom: 6px solid var(--accent-gold);
+            display: flex;
+            align-items: center;
+            padding: 0 60px;
+            box-sizing: border-box;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            position: relative;
+            z-index: 10;
+        }
+
+        header h1 {
+            color: #ffffff;
+            font-size: 56px;
+            font-weight: 800;
+            margin: 0;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .eng {
+            font-family: 'Times New Roman', serif;
+            direction: ltr;
+            display: inline-block;
+        }
+
+        /* Content Area */
+        .content {
+            flex: 1;
+            padding: 60px 80px;
+            display: flex;
+            flex-direction: column;
+            gap: 50px;
+            position: relative;
+            z-index: 5;
+        }
+
+        .cards-row {
+            display: flex;
+            gap: 50px;
+            height: 100%;
+            align-items: stretch;
+        }
+
+        .card {
+            flex: 1;
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 50px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.08);
+            border: 2px solid #e2e8f0;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            opacity: 0; /* JS Animated */
+        }
+
+        .card-icon {
+            width: 100px;
+            height: 100px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+
+        .card-icon svg {
+            width: 50px;
+            height: 50px;
+            fill: var(--color-blue);
+        }
+
+        .card h2 {
+            font-size: 42px;
+            color: var(--header-start);
+            margin: 0 0 20px 0;
+            font-weight: 800;
+        }
+
+        .card p {
+            font-size: 32px;
+            line-height: 1.6;
+            color: var(--text-muted);
+            margin: 0;
+            flex: 1;
+        }
+
+        .card strong {
+            color: var(--text-main);
+        }
+
+        .card-highlight {
+            background: rgba(243, 156, 18, 0.1);
+            border: 2px solid var(--accent-gold);
+        }
+
+        .card-highlight .card-icon {
+            background: rgba(243, 156, 18, 0.2);
+        }
+
+        .card-highlight .card-icon svg {
+            fill: var(--accent-gold);
+        }
+
+        /* Decorative Background Elements inside cards */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -50px;
+            left: -50px;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(59,130,246,0.05) 0%, transparent 70%);
+            z-index: 0;
+        }
+        .card > * { position: relative; z-index: 1; }
+
+    </style>
+</head>
+<body>
+
+    <div class="bg-pattern"></div>
+
+    <div class="slide-container" id="slide">
+        <header>
+            <h1>ما هو الترانزستور الحقلي <span class="eng">(FET)</span>؟</h1>
+        </header>
+
+        <div class="content">
+            <div class="cards-row">
+                
+                <!-- Card 1 -->
+                <div class="card" id="card1">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M9,21V22H7V21A2,2 0 0,1 5,19V4A2,2 0 0,1 7,2H17A2,2 0 0,1 19,4V19A2,2 0 0,1 17,21V22H15V21H9M7,4V9H17V4H7M7,19H17V11H7V19M8,12H16V14H8V12M8,15H16V17H8V15Z" />
+                        </svg>
+                    </div>
+                    <h2>أداة نصف ناقلة</h2>
+                    <p>
+                        هو أداة إلكترونية مصنوعة من مواد <strong>أشباه الموصلات</strong>، تُستخدم للتحكم في تدفق التيار الكهربائي وتعمل كمفتاح أو مضخم للإشارات.
+                    </p>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="card" id="card2">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M11,7H13V11H17V13H13V17H11V13H7V11H11V7Z" />
+                        </svg>
+                    </div>
+                    <h2>أحادي القطبية <span class="eng" style="font-size: 28px;">(Unipolar)</span></h2>
+                    <p>
+                        يعتمد في نقل التيار على <strong>نوع واحد</strong> من حوامل الشحنة.<br><br>
+                        إما <span style="color: var(--color-blue); font-weight: bold;">إلكترونات</span> أو <span style="color: var(--color-red); font-weight: bold;">ثقوب</span>، وليس كليهما معاً.
+                    </p>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="card card-highlight" id="card3">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M11,21V19.93C5.06,19.43 2,13 5.05,8.08L6.46,9.5C4.24,12.92 6.07,17.43 10,17.92V16L13,18.5L10,21M18.95,15.92C21.94,11 18.89,4.57 13,4.07V2L10,4.5L13,7V5.08C16.93,5.57 18.76,10.08 16.54,13.5L17.95,14.92M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10Z" />
+                        </svg>
+                    </div>
+                    <h2>التحكم بالجهد</h2>
+                    <p>
+                        يتم التحكم بالتيار المار فيه عن طريق تغيير <strong>جهد الدخل</strong> (الحقل الكهربائي).<br><br>
+                        <em>بخلاف ترانزستور <span class="eng">BJT</span> الذي يتم التحكم فيه عن طريق التيار.</em>
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Scaling Logic
+        function resize() {
+            const container = document.getElementById('slide');
+            const scaleX = window.innerWidth / 1920;
+            const scaleY = window.innerHeight / 1080;
+            const scale = Math.min(scaleX, scaleY);
+            container.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Animation Logic (Timecut safe)
+        const cards = [
+            document.getElementById('card1'),
+            document.getElementById('card2'),
+            document.getElementById('card3')
+        ];
+
+        function easeOutQuart(t) {
+            return 1 - Math.pow(1 - t, 4);
+        }
+
+        function animate(timestamp) {
+            const t = timestamp / 1000;
+
+            cards.forEach((card, index) => {
+                const startTime = 0.5 + index * 0.4;
+                const endTime = startTime + 0.8;
+                
+                let progress = 0;
+                if (t > startTime && t < endTime) {
+                    progress = easeOutQuart((t - startTime) / 0.8);
+                } else if (t >= endTime) {
+                    progress = 1;
+                }
+
+                if (progress > 0) {
+                    card.style.opacity = progress;
+                    card.style.transform = `translateY(${(1 - progress) * 80}px)`;
+                } else {
+                    card.style.opacity = 0;
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
