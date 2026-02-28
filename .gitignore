@@ -349,6 +349,7 @@ timecut.db
 *.sqlite
 *.sqlite3
 output/
+publish_single/
 Videos/
 build.log
 build-core.log

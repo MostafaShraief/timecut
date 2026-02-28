@@ -34,6 +34,13 @@ public static class MauiProgram
 		// Initialize database
 		Task.Run(async () => await app.Services.InitializeDatabaseAsync()).GetAwaiter().GetResult();
 
+		// Start background workers (MAUI doesn't start IHostedService automatically)
+		var hostedServices = app.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>();
+		foreach (var service in hostedServices)
+		{
+			_ = service.StartAsync(CancellationToken.None);
+		}
+
 		return app;
 	}
 }
