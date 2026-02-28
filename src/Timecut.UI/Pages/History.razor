@@ -1,0 +1,185 @@
+@page "/history"
+
+<PageTitle>History — Timecut</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudText Typo="Typo.h5">Recording History</MudText>
+    @if (_entries.Any())
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                   OnClick="ClearHistory">Clear All</MudButton>
+    }
+</MudStack>
+
+@if (!_entries.Any())
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        No recording history yet. Start a recording from the <MudLink Href="/new">New Recording</MudLink> page.
+    </MudAlert>
+}
+else
+{
+    <MudDataGrid Items="@_entries" Dense="true" Hover="true" Striped="true" Bordered="false"
+                 SortMode="SortMode.Single" Filterable="true">
+        <Columns>
+            <PropertyColumn Property="x => x.SourceName" Title="Source" />
+            <PropertyColumn Property="x => x.FinalStatus" Title="Status">
+                <CellTemplate>
+                    <MudChip T="string" Color="@GetStatusColor(context.Item.FinalStatus)" Size="Size.Small" Variant="Variant.Filled">
+                        @context.Item.FinalStatus.ToString()
+                    </MudChip>
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.Width" Title="Resolution">
+                <CellTemplate>
+                    @($"{context.Item.Width}x{context.Item.Height}")
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.Fps" Title="FPS" />
+            <PropertyColumn Property="x => x.Duration" Title="Duration">
+                <CellTemplate>@($"{context.Item.Duration}s")</CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.OutputFileSize" Title="Size">
+                <CellTemplate>
+                    @(context.Item.OutputFileSize.HasValue ? FormatSize(context.Item.OutputFileSize.Value) : "—")
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.CreatedAt" Title="Date" Format="yyyy-MM-dd HH:mm" />
+            <PropertyColumn Property="x => x.ProcessingTime" Title="Time">
+                <CellTemplate>
+                    @(context.Item.ProcessingTime.HasValue ? FormatDuration(context.Item.ProcessingTime.Value) : "—")
+                </CellTemplate>
+            </PropertyColumn>
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
+                <CellTemplate>
+                    <MudStack Row="true" Spacing="1">
+                        @if (context.Item.FinalStatus == JobStatusEnum.Done && !string.IsNullOrEmpty(context.Item.OutputPath))
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small"
+                                           OnClick="() => PreviewVideo(context.Item)" title="Preview" />
+                            <MudIconButton Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Small"
+                                           OnClick="() => OpenFolder(context.Item)" title="Open folder" />
+                        }
+                        <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="() => ReRun(context.Item)" title="Re-run with same settings" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => DeleteEntry(context.Item)" title="Delete" />
+                    </MudStack>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    [Inject] private IJobRepository JobRepo { get; set; } = null!;
+    [Inject] private IJobQueue JobQueue { get; set; } = null!;
+    [Inject] private ProgressNotifier Notifier { get; set; } = null!;
+    [Inject] private NavigationManager Nav { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+    [Inject] private IDialogService DialogService { get; set; } = null!;
+
+    private List<JobHistoryEntry> _entries = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _entries = await JobRepo.GetAllAsync(200);
+    }
+
+    private async Task PreviewVideo(JobHistoryEntry entry)
+    {
+        if (string.IsNullOrEmpty(entry.OutputPath)) return;
+
+        var parameters = new DialogParameters<VideoPreviewDialog>
+        {
+            { x => x.VideoPath, entry.OutputPath },
+            { x => x.Title, entry.SourceName }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<VideoPreviewDialog>("Video Preview", parameters, options);
+    }
+
+    private void OpenFolder(JobHistoryEntry entry)
+    {
+        if (string.IsNullOrEmpty(entry.OutputPath)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{entry.OutputPath}\"",
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
+    private async Task ReRun(JobHistoryEntry entry)
+    {
+        var job = new RecordingJob
+        {
+            SourceType = entry.SourceType,
+            Url = entry.SourceUrl,
+            HtmlContent = entry.SourceContent,
+            SourceName = $"[Re-run] {entry.SourceName}",
+            UseTemplate = entry.UsedTemplate,
+            TemplateId = entry.TemplateId,
+            Options = new RecordingOptions
+            {
+                Fps = entry.Fps,
+                Duration = entry.Duration,
+                Width = entry.Width,
+                Height = entry.Height,
+                PageZoom = entry.PageZoom
+            }
+        };
+
+        await JobQueue.EnqueueAsync(job);
+        Notifier.NotifyJobListChanged();
+        Snackbar.Add("Job re-queued", Severity.Success);
+        Nav.NavigateTo("/");
+    }
+
+    private async Task DeleteEntry(JobHistoryEntry entry)
+    {
+        await JobRepo.DeleteAsync(entry.Id);
+        _entries = await JobRepo.GetAllAsync(200);
+        Snackbar.Add("Entry deleted", Severity.Info);
+    }
+
+    private async Task ClearHistory()
+    {
+        await JobRepo.ClearAllAsync();
+        _entries.Clear();
+        Snackbar.Add("History cleared", Severity.Info);
+    }
+
+    private Color GetStatusColor(JobStatusEnum status) => status switch
+    {
+        JobStatusEnum.Done => Color.Success,
+        JobStatusEnum.Error => Color.Error,
+        JobStatusEnum.Cancelled => Color.Warning,
+        _ => Color.Default
+    };
+
+    private string FormatSize(long bytes)
+    {
+        if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824.0:F1} GB";
+        if (bytes >= 1_048_576) return $"{bytes / 1_048_576.0:F1} MB";
+        if (bytes >= 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes} B";
+    }
+
+    private string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalMinutes >= 1) return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.TotalSeconds:F1}s";
+    }
+}

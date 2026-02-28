@@ -1,0 +1,231 @@
+@page "/"
+@implements IDisposable
+
+<PageTitle>Dashboard — Timecut</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-4">Dashboard</MudText>
+
+@if (!_jobs.Any())
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+        No active jobs. <MudLink Href="/new">Start a new recording</MudLink> to get started.
+    </MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var job in _jobs)
+        {
+            <MudItem xs="12" md="6" lg="4">
+                <MudCard Elevation="2" Class="mud-height-full">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle1" Class="d-flex align-center gap-2">
+                                @job.SourceName
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudChip T="string" Color="@GetStatusColor(job.Status)" Size="Size.Small" Variant="Variant.Filled">
+                                @job.Status.ToString()
+                            </MudChip>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (job.Status == JobStatusEnum.Running)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Value="@job.Progress" Max="100" Class="mb-2" Rounded="true" Size="Size.Medium">
+                                <MudText Typo="Typo.caption">@($"{job.Progress:F1}%")</MudText>
+                            </MudProgressLinear>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@job.StatusMessage</MudText>
+                        }
+                        else if (job.Status == JobStatusEnum.Queued)
+                        {
+                            <MudProgressLinear Color="Color.Warning" Indeterminate="true" Class="mb-2" Rounded="true" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Waiting for slot...</MudText>
+                        }
+                        else if (job.Status == JobStatusEnum.Done)
+                        {
+                            <MudProgressLinear Color="Color.Success" Value="100" Max="100" Class="mb-2" Rounded="true" />
+                            <MudText Typo="Typo.caption" Color="Color.Success">
+                                Completed @(job.CompletedAt.HasValue ? $"— {FormatDuration(job.CompletedAt.Value - (job.StartedAt ?? job.CreatedAt))}" : "")
+                            </MudText>
+                        }
+                        else if (job.Status == JobStatusEnum.Error)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@job.Error</MudAlert>
+                        }
+                        else if (job.Status == JobStatusEnum.Cancelled)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning">Cancelled</MudText>
+                        }
+
+                        <MudStack Row="true" Class="mt-2" Spacing="2">
+                            <MudText Typo="Typo.caption">@($"{job.Options.Width}x{job.Options.Height}")</MudText>
+                            <MudText Typo="Typo.caption">@($"{job.Options.Fps} FPS")</MudText>
+                            <MudText Typo="Typo.caption">@($"{job.Options.Duration}s")</MudText>
+                            @if (Math.Abs(job.Options.PageZoom - 1.0) > 0.01)
+                            {
+                                <MudText Typo="Typo.caption">@($"Zoom {job.Options.PageZoom:F1}x")</MudText>
+                            }
+                        </MudStack>
+                    </MudCardContent>
+                    <MudCardActions>
+                        @if (job.Status == JobStatusEnum.Running || job.Status == JobStatusEnum.Queued)
+                        {
+                            <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
+                                       OnClick="() => CancelJob(job)">Cancel</MudButton>
+                        }
+                        @if (job.Status == JobStatusEnum.Done && !string.IsNullOrEmpty(job.OutputPath))
+                        {
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                       OnClick="() => PreviewVideo(job)">
+                                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Class="mr-1" /> Preview
+                            </MudButton>
+                            <MudButton Variant="Variant.Text" Color="Color.Secondary" Size="Size.Small"
+                                       OnClick="() => OpenOutputFolder(job)">
+                                <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Small" Class="mr-1" /> Folder
+                            </MudButton>
+                        }
+                        <MudSpacer />
+                        @if (job.Status == JobStatusEnum.Done || job.Status == JobStatusEnum.Error || job.Status == JobStatusEnum.Cancelled)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                           OnClick="() => RemoveJob(job)" title="Remove from list" />
+                        }
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Inject] private IJobQueue JobQueue { get; set; } = null!;
+    [Inject] private ProgressNotifier Notifier { get; set; } = null!;
+    [Inject] private IDialogService DialogService { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+
+    private List<RecordingJob> _jobs = new();
+
+    protected override void OnInitialized()
+    {
+        RefreshJobs();
+        Notifier.OnProgress += HandleProgress;
+        Notifier.OnStatusChanged += HandleStatusChanged;
+        Notifier.OnJobListChanged += HandleJobListChanged;
+    }
+
+    private void RefreshJobs()
+    {
+        _jobs = JobQueue.GetAllJobs().ToList();
+    }
+
+    private async void HandleProgress(string jobId, double percent, string message)
+    {
+        var job = _jobs.FirstOrDefault(j => j.Id == jobId);
+        if (job != null)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void HandleStatusChanged(string jobId, JobStatusEnum status, string? error)
+    {
+        RefreshJobs();
+        await InvokeAsync(StateHasChanged);
+
+        if (status == JobStatusEnum.Done)
+        {
+            Snackbar.Add($"Recording complete!", Severity.Success);
+        }
+        else if (status == JobStatusEnum.Error)
+        {
+            Snackbar.Add($"Recording failed: {error}", Severity.Error);
+        }
+    }
+
+    private async void HandleJobListChanged()
+    {
+        RefreshJobs();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelJob(RecordingJob job)
+    {
+        job.StopRequested = true;
+        if (job.Status == JobStatusEnum.Queued)
+        {
+            job.Status = JobStatusEnum.Cancelled;
+            Notifier.ReportStatusChange(job.Id, JobStatusEnum.Cancelled);
+        }
+    }
+
+    private void RemoveJob(RecordingJob job)
+    {
+        JobQueue.RemoveJob(job.Id);
+        RefreshJobs();
+    }
+
+    private async Task PreviewVideo(RecordingJob job)
+    {
+        if (string.IsNullOrEmpty(job.OutputPath)) return;
+
+        var parameters = new DialogParameters<VideoPreviewDialog>
+        {
+            { x => x.VideoPath, job.OutputPath },
+            { x => x.Title, job.SourceName }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<VideoPreviewDialog>("Video Preview", parameters, options);
+    }
+
+    private void OpenOutputFolder(RecordingJob job)
+    {
+        if (string.IsNullOrEmpty(job.OutputPath)) return;
+        try
+        {
+            var dir = Path.GetDirectoryName(job.OutputPath);
+            if (dir != null)
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{job.OutputPath}\"",
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch { }
+    }
+
+    private Color GetStatusColor(JobStatusEnum status) => status switch
+    {
+        JobStatusEnum.Queued => Color.Warning,
+        JobStatusEnum.Running => Color.Info,
+        JobStatusEnum.Done => Color.Success,
+        JobStatusEnum.Error => Color.Error,
+        JobStatusEnum.Cancelled => Color.Default,
+        _ => Color.Default
+    };
+
+    private string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalMinutes >= 1)
+            return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.TotalSeconds:F1}s";
+    }
+
+    public void Dispose()
+    {
+        Notifier.OnProgress -= HandleProgress;
+        Notifier.OnStatusChanged -= HandleStatusChanged;
+        Notifier.OnJobListChanged -= HandleJobListChanged;
+    }
+}

@@ -1,0 +1,502 @@
+@page "/new"
+
+<PageTitle>New Recording — Timecut</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-4">New Recording</MudText>
+
+<MudGrid>
+    <MudItem xs="12" lg="8">
+        <MudCard Elevation="2">
+            <MudCardContent>
+                <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                    <!-- URL Tab -->
+                    <MudTabPanel Text="URL" Icon="@Icons.Material.Filled.Link">
+                        <MudTextField @bind-Value="_url" Label="Page URL" Placeholder="https://example.com/animation.html"
+                                      Variant="Variant.Outlined" FullWidth="true" Class="mb-4"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Language" />
+                    </MudTabPanel>
+
+                    <!-- Inline HTML Tab -->
+                    <MudTabPanel Text="Inline HTML" Icon="@Icons.Material.Filled.Code">
+                        <!-- Template Selection -->
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudSwitch @bind-Value="_inlineUseTemplate" Label="Use Template" Color="Color.Primary" />
+                            @if (_inlineUseTemplate)
+                            {
+                                <MudSelect T="string" @bind-Value="_selectedTemplateId" Label="Template"
+                                           Variant="Variant.Outlined" Dense="true" Style="max-width: 300px">
+                                    @foreach (var t in _templates)
+                                    {
+                                        <MudSelectItem Value="@t.Id">@t.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                        </MudStack>
+
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">HTML Content</MudText>
+                        <div style="height: 350px; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; overflow: hidden;">
+                            <StandaloneCodeEditor @ref="_inlineEditor" Id="inline-html-editor"
+                                                  ConstructionOptions="InlineEditorOptions"
+                                                  OnDidChangeModelContent="OnInlineEditorChanged" />
+                        </div>
+
+                        @if (_showLivePreview)
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Live Preview</MudText>
+                            <MudPaper Elevation="1" Class="pa-0" Style="height: 250px; overflow: hidden;">
+                                <iframe srcdoc="@_livePreviewHtml" style="width:100%;height:100%;border:none;" sandbox="allow-scripts"></iframe>
+                            </MudPaper>
+                        }
+
+                        <MudStack Row="true" Class="mt-3">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                                       OnClick="ToggleLivePreview">
+                                @(_showLivePreview ? "Hide Preview" : "Live Preview")
+                            </MudButton>
+                        </MudStack>
+                    </MudTabPanel>
+
+                    <!-- HTML Files Tab -->
+                    <MudTabPanel Text="HTML Files" Icon="@Icons.Material.Filled.UploadFile">
+                        <!-- Template toggle for files -->
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudSwitch @bind-Value="_filesUseTemplate" Label="Use Template for files" Color="Color.Primary" />
+                            @if (_filesUseTemplate)
+                            {
+                                <MudSelect T="string" @bind-Value="_selectedTemplateId" Label="Template"
+                                           Variant="Variant.Outlined" Dense="true" Style="max-width: 300px">
+                                    @foreach (var t in _templates)
+                                    {
+                                        <MudSelectItem Value="@t.Id">@t.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                        </MudStack>
+
+                        <!-- Drag & Drop Zone -->
+                        <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="HandleFilesChanged" Accept=".html,.htm"
+                                       MaximumFileCount="100" Class="mb-4">
+                            <ActivatorContent>
+                                <MudPaper Outlined="true" Class="pa-8 d-flex flex-column align-center justify-center cursor-pointer"
+                                          Style="border-style: dashed; min-height: 120px;"
+                                          @ondragenter="@(() => _isDragging = true)"
+                                          @ondragleave="@(() => _isDragging = false)"
+                                          Elevation="@(_isDragging ? 4 : 0)">
+                                    <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Large" Color="Color.Primary" />
+                                    <MudText Typo="Typo.body1" Class="mt-2">Drag & drop HTML files here</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">or click to browse</MudText>
+                                </MudPaper>
+                            </ActivatorContent>
+                        </MudFileUpload>
+
+                        <!-- File List -->
+                        @if (_fileItems.Any())
+                        {
+                            <MudList T="FileItem" Dense="true">
+                                @foreach (var file in _fileItems)
+                                {
+                                    <MudListItem T="FileItem" Icon="@Icons.Material.Filled.InsertDriveFile">
+                                        <ChildContent>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%">
+                                                <MudText Typo="Typo.body2">@file.Name</MudText>
+                                                <MudStack Row="true" Spacing="1">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                                   OnClick="() => EditFile(file)" title="Edit HTML" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                                   Color="Color.Error" OnClick="() => RemoveFile(file)" title="Remove" />
+                                                </MudStack>
+                                            </MudStack>
+                                        </ChildContent>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        }
+                    </MudTabPanel>
+                </MudTabs>
+            </MudCardContent>
+        </MudCard>
+
+        <!-- File Editor Dialog -->
+        @if (_editingFile != null)
+        {
+            <MudCard Elevation="2" Class="mt-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.subtitle1">Editing: @_editingFile.Name</MudText>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CloseEditor" />
+                    </CardHeaderActions>
+                </MudCardHeader>
+                <MudCardContent>
+                    <div style="height: 400px; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; overflow: hidden;">
+                        <StandaloneCodeEditor @ref="_fileEditor" Id="file-html-editor"
+                                              ConstructionOptions="FileEditorOptions" />
+                    </div>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveFileEdit">Save</MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="CloseEditor">Cancel</MudButton>
+                </MudCardActions>
+            </MudCard>
+        }
+    </MudItem>
+
+    <!-- Recording Options Panel -->
+    <MudItem xs="12" lg="4">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1">Recording Options</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <!-- Preset selector -->
+                <MudSelect T="string" Value="_selectedPresetId" ValueChanged="OnPresetSelected" Label="Preset"
+                           Variant="Variant.Outlined" Dense="true" Class="mb-3" Clearable="true">
+                    @foreach (var p in _presets)
+                    {
+                        <MudSelectItem Value="@p.Id">@p.Name</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudNumericField @bind-Value="_options.Fps" Label="FPS" Variant="Variant.Outlined" Min="1" Max="120" Step="1.0" Class="mb-3" />
+                <MudNumericField @bind-Value="_options.Duration" Label="Duration (seconds)" Variant="Variant.Outlined" Min="0.1" Max="3600" Step="1.0" Class="mb-3" />
+
+                <MudStack Row="true" Spacing="2" Class="mb-3">
+                    <MudNumericField @bind-Value="_options.Width" Label="Width" Variant="Variant.Outlined" Min="1" Max="7680" />
+                    <MudNumericField @bind-Value="_options.Height" Label="Height" Variant="Variant.Outlined" Min="1" Max="4320" />
+                </MudStack>
+
+                <MudNumericField @bind-Value="_options.PageZoom" Label="Page Zoom" Variant="Variant.Outlined"
+                                 Min="0.25" Max="5.0" Step="0.1" Class="mb-3"
+                                 HelperText="1.0 = normal, 2.0 = 200% zoom" />
+
+                <MudNumericField @bind-Value="_options.StartOffset" Label="Start Offset (seconds)" Variant="Variant.Outlined"
+                                 Min="0.0" Max="3600" Step="0.1" Class="mb-3" />
+
+                <MudSelect T="ScreenshotFormat" @bind-Value="_options.ScreenshotFormat" Label="Screenshot Format"
+                           Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem Value="ScreenshotFormat.Jpeg">JPEG</MudSelectItem>
+                    <MudSelectItem Value="ScreenshotFormat.Png">PNG</MudSelectItem>
+                </MudSelect>
+
+                @if (_options.ScreenshotFormat == ScreenshotFormat.Jpeg)
+                {
+                    <MudNumericField @bind-Value="_options.ScreenshotQuality" Label="JPEG Quality" Variant="Variant.Outlined"
+                                     Min="1" Max="100" Class="mb-3" />
+                }
+
+                <MudSelect T="string" @bind-Value="_options.PixelFormat" Label="Pixel Format"
+                           Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem Value="@("yuv420p")">yuv420p (compatible)</MudSelectItem>
+                    <MudSelectItem Value="@("yuv444p")">yuv444p (high quality)</MudSelectItem>
+                    <MudSelectItem Value="@("rgb24")">rgb24</MudSelectItem>
+                </MudSelect>
+
+                <MudTextField @bind-Value="_options.OutputFileName" Label="Output Filename (optional)"
+                              Variant="Variant.Outlined" Placeholder="auto-generated" Class="mb-3" />
+
+                <MudDivider Class="my-3" />
+
+                <MudButton Variant="Variant.Text" Color="Color.Secondary" Size="Size.Small"
+                           OnClick="SaveAsPreset" FullWidth="true" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Save" Size="Size.Small" Class="mr-1" /> Save as Preset
+                </MudButton>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           OnClick="StartRecording" Disabled="_isSubmitting"
+                           StartIcon="@Icons.Material.Filled.FiberManualRecord">
+                    @if (_isSubmitting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Start Recording
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Inject] private IJobQueue JobQueue { get; set; } = null!;
+    [Inject] private ITemplateRepository TemplateRepo { get; set; } = null!;
+    [Inject] private IPresetRepository PresetRepo { get; set; } = null!;
+    [Inject] private IFileManager FileManager { get; set; } = null!;
+    [Inject] private ProgressNotifier Notifier { get; set; } = null!;
+    [Inject] private NavigationManager Nav { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+    [Inject] private IDialogService DialogService { get; set; } = null!;
+
+    // Tab state
+    private string _url = "";
+    private bool _inlineUseTemplate = true;
+    private bool _filesUseTemplate;
+    private string? _selectedTemplateId;
+    private bool _showLivePreview;
+    private string _livePreviewHtml = "";
+    private bool _isDragging;
+    private bool _isSubmitting;
+
+    // Options
+    private RecordingOptions _options = new();
+    private string? _selectedPresetId;
+
+    // Data
+    private List<HtmlTemplate> _templates = new();
+    private List<RecordingPreset> _presets = new();
+    private List<FileItem> _fileItems = new();
+
+    // Editors
+    private StandaloneCodeEditor? _inlineEditor;
+    private StandaloneCodeEditor? _fileEditor;
+    private FileItem? _editingFile;
+    private string _inlineContent = "";
+
+    // Timer for live preview debounce
+    private System.Threading.Timer? _previewDebounce;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates = await TemplateRepo.GetAllAsync();
+        _presets = await PresetRepo.GetAllAsync();
+        if (_templates.Any())
+            _selectedTemplateId = _templates.First().Id;
+    }
+
+    private StandaloneEditorConstructionOptions InlineEditorOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "html",
+            Value = _inlineContent,
+            Theme = "vs-dark",
+            AutomaticLayout = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            FontSize = 14,
+            LineNumbers = "on",
+            WordWrap = "on",
+            ScrollBeyondLastLine = false
+        };
+    }
+
+    private StandaloneEditorConstructionOptions FileEditorOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "html",
+            Value = _editingFile?.Content ?? "",
+            Theme = "vs-dark",
+            AutomaticLayout = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            FontSize = 14,
+            LineNumbers = "on",
+            WordWrap = "on",
+            ScrollBeyondLastLine = false
+        };
+    }
+
+    private void OnInlineEditorChanged(ModelContentChangedEvent e)
+    {
+        if (_showLivePreview)
+        {
+            _previewDebounce?.Dispose();
+            _previewDebounce = new System.Threading.Timer(async _ =>
+            {
+                await UpdateLivePreview();
+            }, null, 500, Timeout.Infinite);
+        }
+    }
+
+    private async Task UpdateLivePreview()
+    {
+        if (_inlineEditor == null) return;
+        var content = await _inlineEditor.GetValue();
+
+        if (_inlineUseTemplate && !string.IsNullOrEmpty(_selectedTemplateId))
+        {
+            var template = _templates.FirstOrDefault(t => t.Id == _selectedTemplateId);
+            if (template != null)
+            {
+                _livePreviewHtml = FileManager.ComposeHtml(template, content);
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
+
+        _livePreviewHtml = content;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleLivePreview()
+    {
+        _showLivePreview = !_showLivePreview;
+        if (_showLivePreview)
+            await UpdateLivePreview();
+    }
+
+    private async Task HandleFilesChanged(IReadOnlyList<IBrowserFile> files)
+    {
+        foreach (var file in files)
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+            _fileItems.Add(new FileItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = file.Name,
+                Content = content
+            });
+        }
+        _isDragging = false;
+    }
+
+    private async Task EditFile(FileItem file)
+    {
+        _editingFile = file;
+        await InvokeAsync(StateHasChanged);
+        // Editor will initialize with the file content via FileEditorOptions
+    }
+
+    private async Task SaveFileEdit()
+    {
+        if (_editingFile != null && _fileEditor != null)
+        {
+            _editingFile.Content = await _fileEditor.GetValue();
+            _editingFile = null;
+            Snackbar.Add("File saved", Severity.Success);
+        }
+    }
+
+    private void CloseEditor() => _editingFile = null;
+
+    private void RemoveFile(FileItem file) => _fileItems.Remove(file);
+
+    private async Task OnPresetSelected(string presetId)
+    {
+        _selectedPresetId = presetId;
+        if (string.IsNullOrEmpty(presetId)) return;
+        var preset = await PresetRepo.GetByIdAsync(presetId);
+        if (preset != null)
+        {
+            _options = preset.Options.Clone();
+        }
+    }
+
+    private async Task SaveAsPreset()
+    {
+        var parameters = new DialogParameters<TextInputDialog>
+        {
+            { x => x.Label, "Preset Name" },
+            { x => x.Value, $"Preset {DateTime.Now:MMdd-HHmm}" }
+        };
+        var dialog = await DialogService.ShowAsync<TextInputDialog>("Save Preset", parameters);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled && result.Data is string name && !string.IsNullOrWhiteSpace(name))
+        {
+            var preset = new RecordingPreset
+            {
+                Name = name,
+                Options = _options.Clone()
+            };
+            await PresetRepo.SaveAsync(preset);
+            _presets = await PresetRepo.GetAllAsync();
+            Snackbar.Add($"Preset '{name}' saved", Severity.Success);
+        }
+    }
+
+    private async Task StartRecording()
+    {
+        _isSubmitting = true;
+        try
+        {
+            var jobs = new List<RecordingJob>();
+
+            // Determine source type based on which tab has content
+            if (!string.IsNullOrWhiteSpace(_url))
+            {
+                jobs.Add(CreateJob(JobSourceType.Url, _url, null, "URL: " + _url, false));
+            }
+
+            if (_inlineEditor != null)
+            {
+                var content = await _inlineEditor.GetValue();
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    var htmlContent = content;
+                    var useTemplate = _inlineUseTemplate;
+
+                    if (useTemplate && !string.IsNullOrEmpty(_selectedTemplateId))
+                    {
+                        var template = _templates.FirstOrDefault(t => t.Id == _selectedTemplateId);
+                        if (template != null)
+                        {
+                            htmlContent = FileManager.ComposeHtml(template, content);
+                        }
+                    }
+
+                    jobs.Add(CreateJob(JobSourceType.InlineHtml, null, htmlContent, "Inline HTML", useTemplate));
+                }
+            }
+
+            foreach (var file in _fileItems)
+            {
+                var htmlContent = file.Content;
+                var useTemplate = _filesUseTemplate;
+
+                if (useTemplate && !string.IsNullOrEmpty(_selectedTemplateId))
+                {
+                    var template = _templates.FirstOrDefault(t => t.Id == _selectedTemplateId);
+                    if (template != null)
+                    {
+                        htmlContent = FileManager.ComposeHtml(template, file.Content);
+                    }
+                }
+
+                jobs.Add(CreateJob(JobSourceType.InlineHtml, null, htmlContent, file.Name, useTemplate));
+            }
+
+            if (!jobs.Any())
+            {
+                Snackbar.Add("No content to record. Add a URL, HTML, or files.", Severity.Warning);
+                return;
+            }
+
+            foreach (var job in jobs)
+            {
+                await JobQueue.EnqueueAsync(job);
+            }
+
+            Notifier.NotifyJobListChanged();
+            Snackbar.Add($"{jobs.Count} job(s) queued", Severity.Success);
+            Nav.NavigateTo("/");
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private RecordingJob CreateJob(JobSourceType sourceType, string? url, string? htmlContent, string sourceName, bool useTemplate)
+    {
+        return new RecordingJob
+        {
+            SourceType = sourceType,
+            Url = url,
+            HtmlContent = htmlContent,
+            SourceName = sourceName,
+            UseTemplate = useTemplate,
+            TemplateId = useTemplate ? _selectedTemplateId : null,
+            Options = _options.Clone()
+        };
+    }
+
+    public class FileItem
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Content { get; set; } = "";
+    }
+}

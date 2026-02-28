@@ -1,0 +1,134 @@
+@page "/settings"
+
+<PageTitle>Settings — Timecut</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-4">Settings</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1">Output</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTextField @bind-Value="_settings.OutputDirectory" Label="Output Directory"
+                              Variant="Variant.Outlined" Class="mb-3"
+                              Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                              OnAdornmentClick="BrowseOutputDir" />
+            </MudCardContent>
+        </MudCard>
+
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1">FFmpeg</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTextField @bind-Value="_settings.FfmpegPath" Label="FFmpeg Path (leave empty for auto-detect)"
+                              Variant="Variant.Outlined" Class="mb-3"
+                              Placeholder="Auto-detect from PATH" />
+
+                <MudAlert Severity="@(_ffmpegAvailable ? Severity.Success : Severity.Warning)" Dense="true">
+                    @(_ffmpegAvailable ? "FFmpeg found and available" : "FFmpeg not found. Please install FFmpeg or set the path above.")
+                </MudAlert>
+            </MudCardContent>
+        </MudCard>
+
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1">Processing</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudNumericField @bind-Value="_settings.MaxConcurrentJobs" Label="Max Concurrent Jobs"
+                                 Variant="Variant.Outlined" Min="1" Max="10" Class="mb-3" />
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1">Appearance</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudSelect T="string" @bind-Value="_settings.Theme" Label="Theme" Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem Value="@("Dark")">Dark</MudSelectItem>
+                    <MudSelectItem Value="@("Light")">Light</MudSelectItem>
+                </MudSelect>
+            </MudCardContent>
+        </MudCard>
+
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1">Cleanup</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudSwitch @bind-Value="_settings.AutoCleanupEnabled" Label="Auto-cleanup old recordings" Color="Color.Primary" Class="mb-3" />
+                @if (_settings.AutoCleanupEnabled)
+                {
+                    <MudNumericField @bind-Value="_settings.AutoCleanupDays" Label="Delete recordings older than (days)"
+                                     Variant="Variant.Outlined" Min="1" Max="365" />
+                }
+            </MudCardContent>
+        </MudCard>
+
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1">About</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText Typo="Typo.body2">Timecut v1.0.0</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    HTML animation to video converter. Based on the original timecut by Steve Tung.
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSettings" Class="mt-2">
+    Save Settings
+</MudButton>
+
+@code {
+    [Inject] private ISettingsService SettingsService { get; set; } = null!;
+    [Inject] private IFileManager FileManager { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+
+    private AppSettings _settings = new();
+    private bool _ffmpegAvailable;
+
+    protected override void OnInitialized()
+    {
+        _settings = SettingsService.GetSettings();
+        _ffmpegAvailable = FileManager.FindFfmpeg() != null;
+    }
+
+    private void BrowseOutputDir()
+    {
+        // In MAUI, we can use FolderPicker. For now, this is handled by the text field.
+        // The MAUI host can register a native folder picker service.
+    }
+
+    private async Task SaveSettings()
+    {
+        if (!string.IsNullOrEmpty(_settings.OutputDirectory))
+        {
+            FileManager.SetOutputDirectory(_settings.OutputDirectory);
+        }
+
+        await SettingsService.SaveSettingsAsync(_settings);
+        Snackbar.Add("Settings saved", Severity.Success);
+    }
+}

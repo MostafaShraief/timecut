@@ -1,0 +1,59 @@
+@using Microsoft.AspNetCore.Components
+
+<MudDialog>
+    <DialogContent>
+        @if (!string.IsNullOrEmpty(VideoPath) && System.IO.File.Exists(VideoPath))
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2">@Title</MudText>
+            <video controls autoplay style="width: 100%; max-height: 70vh; border-radius: 4px; background: #000;">
+                <source src="@GetVideoSrc()" type="video/mp4" />
+                Your browser does not support the video tag.
+            </video>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                @VideoPath
+            </MudText>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning">
+                Video file not found: @VideoPath
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Secondary" OnClick="OpenInExplorer">
+            Open in Explorer
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string VideoPath { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "Video Preview";
+
+    private string GetVideoSrc()
+    {
+        // For MAUI Blazor Hybrid, local files need to be served via a special scheme
+        // or loaded as base64. We'll use file:// for now.
+        return $"file:///{VideoPath.Replace('\\', '/')}";
+    }
+
+    private void OpenInExplorer()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{VideoPath}\"",
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
+    private void Close() => MudDialog.Close();
+}

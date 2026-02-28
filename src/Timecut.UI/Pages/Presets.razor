@@ -1,0 +1,71 @@
+@page "/presets"
+
+<PageTitle>Presets — Timecut</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudText Typo="Typo.h5">Recording Presets</MudText>
+</MudStack>
+
+@if (!_presets.Any())
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        No presets saved. Create one from the <MudLink Href="/new">New Recording</MudLink> page.
+    </MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var preset in _presets)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle1">@preset.Name</MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="() => DeletePreset(preset)" />
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                            <tbody>
+                                <tr><td>Resolution</td><td>@($"{preset.Options.Width}x{preset.Options.Height}")</td></tr>
+                                <tr><td>FPS</td><td>@preset.Options.Fps</td></tr>
+                                <tr><td>Duration</td><td>@($"{preset.Options.Duration}s")</td></tr>
+                                <tr><td>Zoom</td><td>@($"{preset.Options.PageZoom:F1}x")</td></tr>
+                                <tr><td>Format</td><td>@preset.Options.ScreenshotFormat</td></tr>
+                                <tr><td>Codec</td><td>@preset.Options.VideoCodec</td></tr>
+                                <tr><td>Preset</td><td>@preset.Options.EncodingPreset</td></tr>
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                   Href="/new">Use this preset</MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Inject] private IPresetRepository PresetRepo { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+
+    private List<RecordingPreset> _presets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _presets = await PresetRepo.GetAllAsync();
+    }
+
+    private async Task DeletePreset(RecordingPreset preset)
+    {
+        await PresetRepo.DeleteAsync(preset.Id);
+        _presets = await PresetRepo.GetAllAsync();
+        Snackbar.Add("Preset deleted", Severity.Info);
+    }
+}

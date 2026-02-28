@@ -1,0 +1,129 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider @ref="_themeProvider" Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">Timecut</MudText>
+        <MudSpacer />
+        <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Outlined" Class="mr-2">
+            @_activeJobCount Active
+        </MudChip>
+        <MudIconButton Icon="@Icons.Material.Filled.DarkMode" Color="Color.Inherit" OnClick="ToggleTheme" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="DrawerVariant.Mini" OpenMiniOnHover="true">
+        <MudNavMenu>
+            <MudNavLink Href="/" Icon="@Icons.Material.Filled.Dashboard" Match="NavLinkMatch.All">Dashboard</MudNavLink>
+            <MudNavLink Href="/new" Icon="@Icons.Material.Filled.FiberNew" Match="NavLinkMatch.Prefix">New Recording</MudNavLink>
+            <MudNavLink Href="/templates" Icon="@Icons.Material.Filled.Code" Match="NavLinkMatch.Prefix">Templates</MudNavLink>
+            <MudNavLink Href="/presets" Icon="@Icons.Material.Filled.Tune" Match="NavLinkMatch.Prefix">Presets</MudNavLink>
+            <MudNavLink Href="/history" Icon="@Icons.Material.Filled.History" Match="NavLinkMatch.Prefix">History</MudNavLink>
+            <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.Prefix">Settings</MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Class="pt-14">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private MudThemeProvider _themeProvider = null!;
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = true;
+    private int _activeJobCount;
+
+    [Inject] private ProgressNotifier Notifier { get; set; } = null!;
+    [Inject] private IJobQueue JobQueue { get; set; } = null!;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#3b82f6",
+            Secondary = "#8b5cf6",
+            AppbarBackground = "#1e293b",
+            Background = "#f8fafc",
+            Surface = "#ffffff",
+            DrawerBackground = "#f1f5f9",
+            DrawerText = "#334155",
+            TextPrimary = "#1e293b",
+            Success = "#22c55e",
+            Warning = "#f59e0b",
+            Error = "#ef4444",
+            Info = "#3b82f6"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#3b82f6",
+            Secondary = "#8b5cf6",
+            AppbarBackground = "#0f172a",
+            Background = "#0f172a",
+            Surface = "#1e293b",
+            DrawerBackground = "#1e293b",
+            DrawerText = "#94a3b8",
+            TextPrimary = "#e2e8f0",
+            TextSecondary = "#94a3b8",
+            Success = "#22c55e",
+            Warning = "#f59e0b",
+            Error = "#ef4444",
+            Info = "#3b82f6"
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = new[] { "Inter", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif" }
+            }
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DrawerMiniWidthLeft = "56px",
+            DrawerWidthLeft = "220px"
+        }
+    };
+
+    protected override void OnInitialized()
+    {
+        Notifier.OnJobListChanged += UpdateJobCount;
+        Notifier.OnStatusChanged += OnStatusChanged;
+        UpdateJobCount();
+    }
+
+    private void OnStatusChanged(string jobId, JobStatusEnum status, string? error)
+    {
+        UpdateJobCount();
+    }
+
+    private void UpdateJobCount()
+    {
+        var jobs = JobQueue.GetAllJobs();
+        _activeJobCount = jobs.Count(j => j.Status == JobStatusEnum.Queued || j.Status == JobStatusEnum.Running);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private void ToggleTheme()
+    {
+        _isDarkMode = !_isDarkMode;
+        if (_themeProvider != null)
+        {
+            // MudBlazor handles theme switching via IsDarkMode binding
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Notifier.OnJobListChanged -= UpdateJobCount;
+        Notifier.OnStatusChanged -= OnStatusChanged;
+    }
+}

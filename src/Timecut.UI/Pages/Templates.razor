@@ -1,0 +1,170 @@
+@page "/templates"
+
+<PageTitle>Templates — Timecut</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudText Typo="Typo.h5">HTML Templates</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="CreateNewTemplate">New Template</MudButton>
+</MudStack>
+
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Templates provide a reusable outer HTML structure. Use <code>&lt;!-- CONTENT --&gt;</code> as a placeholder
+    where your content HTML will be injected. Templates are never processed into video themselves.
+</MudText>
+
+<MudGrid>
+    <!-- Template list -->
+    <MudItem xs="12" md="4">
+        @if (!_templates.Any())
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                No templates yet. Create one to get started.
+            </MudAlert>
+        }
+        else
+        {
+            <MudList T="HtmlTemplate" @bind-SelectedValue="_selectedTemplate" Dense="true">
+                @foreach (var template in _templates)
+                {
+                    <MudListItem T="HtmlTemplate" Value="template" OnClick="() => SelectTemplate(template)"
+                                 Icon="@Icons.Material.Filled.Code">
+                        <ChildContent>
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Style="width:100%">
+                                <MudText Typo="Typo.body2">@template.Name</MudText>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                               Color="Color.Error" OnClick="() => DeleteTemplate(template)"
+                                               title="Delete template" />
+                            </MudStack>
+                        </ChildContent>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </MudItem>
+
+    <!-- Template editor -->
+    <MudItem xs="12" md="8">
+        @if (_editingTemplate != null)
+        {
+            <MudCard Elevation="2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudTextField @bind-Value="_editingTemplate.Name" Label="Template Name"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <div style="height: 450px; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; overflow: hidden;">
+                        <StandaloneCodeEditor @ref="_editor" Id="template-editor"
+                                              ConstructionOptions="EditorOptions" />
+                    </div>
+
+                    @if (_showPreview)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Template Preview</MudText>
+                        <MudPaper Elevation="1" Class="pa-0" Style="height: 200px; overflow: hidden;">
+                            <iframe srcdoc="@_previewHtml" style="width:100%;height:100%;border:none;" sandbox="allow-scripts"></iframe>
+                        </MudPaper>
+                    }
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTemplate">Save</MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="PreviewTemplate">
+                        @(_showPreview ? "Hide Preview" : "Preview")
+                    </MudButton>
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Text" OnClick="CancelEdit">Cancel</MudButton>
+                </MudCardActions>
+            </MudCard>
+        }
+        else
+        {
+            <MudPaper Outlined="true" Class="pa-8 d-flex align-center justify-center" Style="min-height: 300px;">
+                <MudText Typo="Typo.body1" Color="Color.Secondary">Select or create a template to edit</MudText>
+            </MudPaper>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Inject] private ITemplateRepository TemplateRepo { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+
+    private List<HtmlTemplate> _templates = new();
+    private HtmlTemplate? _selectedTemplate;
+    private HtmlTemplate? _editingTemplate;
+    private StandaloneCodeEditor? _editor;
+    private bool _showPreview;
+    private string _previewHtml = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates = await TemplateRepo.GetAllAsync();
+    }
+
+    private StandaloneEditorConstructionOptions EditorOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            Language = "html",
+            Value = _editingTemplate?.Content ?? "",
+            Theme = "vs-dark",
+            AutomaticLayout = true,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            FontSize = 14,
+            LineNumbers = "on",
+            WordWrap = "on"
+        };
+    }
+
+    private void CreateNewTemplate()
+    {
+        _editingTemplate = new HtmlTemplate();
+        _showPreview = false;
+    }
+
+    private void SelectTemplate(HtmlTemplate template)
+    {
+        _editingTemplate = new HtmlTemplate
+        {
+            Id = template.Id,
+            Name = template.Name,
+            Content = template.Content,
+            CreatedAt = template.CreatedAt
+        };
+        _showPreview = false;
+    }
+
+    private async Task SaveTemplate()
+    {
+        if (_editingTemplate == null) return;
+        if (_editor != null)
+            _editingTemplate.Content = await _editor.GetValue();
+
+        await TemplateRepo.SaveAsync(_editingTemplate);
+        _templates = await TemplateRepo.GetAllAsync();
+        Snackbar.Add($"Template '{_editingTemplate.Name}' saved", Severity.Success);
+        _editingTemplate = null;
+    }
+
+    private async Task PreviewTemplate()
+    {
+        _showPreview = !_showPreview;
+        if (_showPreview && _editor != null)
+        {
+            _previewHtml = await _editor.GetValue();
+        }
+    }
+
+    private async Task DeleteTemplate(HtmlTemplate template)
+    {
+        await TemplateRepo.DeleteAsync(template.Id);
+        _templates = await TemplateRepo.GetAllAsync();
+        if (_editingTemplate?.Id == template.Id)
+            _editingTemplate = null;
+        Snackbar.Add("Template deleted", Severity.Info);
+    }
+
+    private void CancelEdit() => _editingTemplate = null;
+}
