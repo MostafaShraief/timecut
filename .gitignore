@@ -349,7 +349,10 @@ timecut.db
 *.sqlite
 *.sqlite3
 output/
+<<<<<<< HEAD
 publish_single/
+=======
+>>>>>>> 0720852 (Program now have a new UI, more features, more stable)
 Videos/
 build.log
 build-core.log

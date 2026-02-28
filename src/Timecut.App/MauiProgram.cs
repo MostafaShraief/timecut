@@ -34,6 +34,7 @@ public static class MauiProgram
 		// Initialize database
 		Task.Run(async () => await app.Services.InitializeDatabaseAsync()).GetAwaiter().GetResult();
 
+<<<<<<< HEAD
 		// Start background workers (MAUI doesn't start IHostedService automatically)
 		var hostedServices = app.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>();
 		foreach (var service in hostedServices)
@@ -41,6 +42,8 @@ public static class MauiProgram
 			_ = service.StartAsync(CancellationToken.None);
 		}
 
+=======
+>>>>>>> 0720852 (Program now have a new UI, more features, more stable)
 		return app;
 	}
 }
